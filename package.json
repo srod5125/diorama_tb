@@ -1,0 +1,26 @@
+{
+	"name": "diorama",
+	"version": "0.0.1",
+	"private": true,
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"tauri": "tauri",
+		"lint": "eslint ."
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-auto": "^3.0.0",
+		"@sveltejs/adapter-static": "^3.0.1",
+		"@sveltejs/kit": "^2.0.0",
+		"@sveltejs/vite-plugin-svelte": "^3.0.0",
+		"@tauri-apps/cli": "^1.5.9",
+		"eslint": "^8.56.0",
+		"svelte": "^4.2.7",
+		"vite": "^5.0.3"
+	},
+	"type": "module",
+	"dependencies": {
+		"@tauri-apps/api": "^1.5.3"
+	}
+}
