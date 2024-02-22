@@ -1,0 +1,23 @@
+
+grammar;
+
+pub Spec: &'input str = {
+    <s:Scheme+> =>  {
+
+        println!("{:?}",s);
+
+        ""
+    }
+};
+
+
+Scheme: &'input str = {
+    "obj" ":" <r"[a-z]+"> ";" => <>
+}
+//Inits: & str  = "init:" <i:r"[a-z]+"> ";" => i;
+//Action: & str  = "action:" <a:r"[a-z]+"> ";" => a;
+//Check: & str  = "check:" <c:r"[a-z]+"> ";" => c;
+
+
+//Num: i32 = <s:r"[0-9]+"> => i32::from_str(s).unwrap();
+//"when" <f:r"[a-z]+">  => f
