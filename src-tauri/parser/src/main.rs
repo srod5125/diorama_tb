@@ -7,8 +7,17 @@ fn d_gram_test(){
     assert!(
         d_grammar::SpecParser::new()
             .parse("
-                    obj: balloon;
-                    obj: pin;
+                    module time is
+
+                        Clocks are {
+                            hours   in Int is between 1..12.
+                            minutes in Int is between 1..59.
+                            seconds in Int is between 1..59.
+                        };
+
+
+
+                    end time;
                    ")
             .is_ok()
     );

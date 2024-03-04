@@ -1,23 +1,156 @@
-
 grammar;
 
 pub Spec: &'input str = {
-    <s:Scheme+> =>  {
-
-        println!("{:?}",s);
-
-        ""
-    }
+    "module" <r"[A-Za-z]+"> "is"
+        Data
+        Body
+    "end" <r"[A-Za-z]+">  => ""
 };
 
+Data: &'input str = {
+    <Scheme+> => "",
+    <Members> => "",
+}
+
+Body: &'input str = {
+    <Action+> => ""
+}
 
 Scheme: &'input str = {
-    "obj" ":" <r"[a-z]+"> ";" => <>
+    Name "is" "in" Set => "",
+    Name "are" Set => ""
 }
-//Inits: & str  = "init:" <i:r"[a-z]+"> ";" => i;
-//Action: & str  = "action:" <a:r"[a-z]+"> ";" => a;
-//Check: & str  = "check:" <c:r"[a-z]+"> ";" => c;
+
+Set: &'input str = {
+    Expr => "",
+    "{" Set ("," Set)* "}" => ""
+}
+
+Members: &'input str = {
+    "members" "are" "{" Set ("," Set)* "}"  => ""
+}
 
 
-//Num: i32 = <s:r"[0-9]+"> => i32::from_str(s).unwrap();
-//"when" <f:r"[a-z]+">  => f
+Action: &'input str = {
+    "action" (<r"[A-Za-z]+">)? "is"
+        When_Block ("or"  <When_Block>)*
+        Then_Block ("or" Then_Block)*
+    "end" "action"  => ""
+}
+
+When_Block: &'input str = {
+    "when" Quantifiers ":"
+        Stmt+ => ""
+}
+Then_Block: &'input str = {
+    "then" ":"
+        Stmt+ => ""
+}
+
+Quantifiers: &'input str = {
+    "any" => "",
+    "all" => "",
+    "at" "most" <r"[0-9]+"> => "",
+    "at" "least" <r"[0-9]+"> => ""
+}
+
+Stmt: &'input str = {
+    If_Stmt => "",
+    Selection_Stmt "." => "",
+    Assignment "." => ""
+}
+
+Selection_Stmt: &'input str = {
+    "for"  Name "in" Expr Filter? => "",
+    "for" "some" Name "in" Expr Filter? => "",
+    "for" "all" Name "in" Expr Filter? => ""
+}
+Filter: &'input str = {
+    "such" "that" Expr => ""
+}
+
+If_Stmt: &'input str = {
+
+    "if" Expr "then" ":"
+        Stmt+
+
+    Else_If*
+
+    Else?
+
+    "endif" => ""
+
+}
+
+Else_If: &'input str = {
+    "elsif" Expr "then" ":"
+        Stmt+ => ""
+}
+
+Else: &'input str = {
+    "else" ":"
+        Stmt+  => ""
+}
+
+Assignment: &'input str = {
+    Name "'" ":=" Expr => ""
+}
+
+Expr: &'input str = {
+
+    #[precedence(level="0")]
+    Membership => "",
+
+    // Conditional Exprssions:
+    #[precedence(level="1")] #[assoc(side="left")]
+    Expr "and" Membership => "",
+    Expr "or" Membership => "",
+    Expr "or-either" Membership => "",
+
+    #[precedence(level="2")] #[assoc(side="left")]
+    "not" Expr => "",
+
+}
+
+Membership: &'input str = {
+
+    Arithmatic => "",
+
+    Membership "is"? "between" Arithmatic ".." Arithmatic => "",
+    Membership "is"? "in" Arithmatic => "",
+
+}
+
+Arithmatic: &'input str = {
+
+    #[precedence(level="0")]
+    Term => "",
+
+    #[precedence(level="1")] #[assoc(side="left")]
+    Arithmatic "*" Term => "",
+    Arithmatic "/" Term => "",
+
+    #[precedence(level="2")] #[assoc(side="left")]
+    Arithmatic "+" Term => "",
+    Arithmatic "-" Term => "",
+
+    #[precedence(level="3")] #[assoc(side="left")]
+    "-" Arithmatic => "",
+}
+
+Term: &'input str = {
+    Name => "",
+    Num => "",
+    "(" Expr ")" => "",
+    //function call here
+}
+
+
+Name: &'input str = {
+    <r"[A-Za-z]+"> => ""
+}
+Num: &'input str = {
+    <r"[0-9]+"> => ""
+}
+
+
