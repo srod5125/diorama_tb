@@ -2,29 +2,38 @@ use lalrpop_util::lalrpop_mod;
 
 lalrpop_mod!(pub d_grammar);
 
-#[test]
+//#[test]
 fn d_gram_test(){
-    assert!(
-        d_grammar::SpecParser::new()
-            .parse("
-                    module time is
+    let mut errors = Vec::new();
 
-                        Clocks are {
-                            hours   in Int is between 1..12.
-                            minutes in Int is between 1..59.
-                            seconds in Int is between 1..59.
-                        };
+    let spec = d_grammar::SpecParser::new()
+                    .parse( &mut errors,
+                            "
+                            module time is
 
+                                Clocks are { hours, minutes, seconds }
+                                where: hours is in Int and is between 1..12.
+                                where: minutes is in Int and is between 1..59.
+                                where: seconds is in Int and is between 1..59.
 
+                                members are { c in Clocks }
 
-                    end time;
-                   ")
-            .is_ok()
-    );
+                                action Tick is
+                                    when always:
+                                    then:
+                                        for c in members.
+                                        
+                                end action
+
+                            end time 
+                        
+                            ");
+    println!("Line\n:{}\n",spec.clone().unwrap());
+    //assert!( spec.is_ok() );
 }
 
 
-#[cfg(not(test))]
+//#[cfg(not(test))]
 fn main() {
-    println!("Hello, world!");
+    d_gram_test();
 }

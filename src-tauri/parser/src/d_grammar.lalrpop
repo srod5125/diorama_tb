@@ -1,15 +1,22 @@
-grammar;
+use std::str::FromStr;
+use lalrpop_util::ErrorRecovery;
+
+grammar<'err>(
+                errors: &'err mut Vec<ErrorRecovery<usize,
+                Token<'input>, 
+                &'static str>>
+             );
 
 pub Spec: &'input str = {
-    "module" <r"[A-Za-z]+"> "is"
+    "module" Name "is"
         Data
+        Members
         Body
-    "end" <r"[A-Za-z]+">  => ""
+    "end" Name  => ""
 };
 
 Data: &'input str = {
-    <Scheme+> => "",
-    <Members> => "",
+    <Scheme+> => ""
 }
 
 Body: &'input str = {
@@ -17,8 +24,11 @@ Body: &'input str = {
 }
 
 Scheme: &'input str = {
-    Name "is" "in" Set => "",
-    Name "are" Set => ""
+    Name "is" "in" Set Where_Clause* => "",
+    Name "are" Set Where_Clause* => ""
+}
+Where_Clause: &'input str = {
+    "where" ":" Expr "."  => ""
 }
 
 Set: &'input str = {
@@ -32,15 +42,15 @@ Members: &'input str = {
 
 
 Action: &'input str = {
-    "action" (<r"[A-Za-z]+">)? "is"
-        When_Block ("or"  <When_Block>)*
+    "action" (Name)? "is"
+        When_Block ("or" When_Block)*
         Then_Block ("or" Then_Block)*
     "end" "action"  => ""
 }
 
 When_Block: &'input str = {
-    "when" Quantifiers ":"
-        Stmt+ => ""
+    "when" Quantifiers? ":"
+        Stmt* => ""
 }
 Then_Block: &'input str = {
     "then" ":"
@@ -50,8 +60,9 @@ Then_Block: &'input str = {
 Quantifiers: &'input str = {
     "any" => "",
     "all" => "",
-    "at" "most" <r"[0-9]+"> => "",
-    "at" "least" <r"[0-9]+"> => ""
+    "at" "most" Num => "",
+    "at" "least" Num => "",
+    "always" => "",
 }
 
 Stmt: &'input str = {
@@ -118,6 +129,8 @@ Membership: &'input str = {
 
     Membership "is"? "between" Arithmatic ".." Arithmatic => "",
     Membership "is"? "in" Arithmatic => "",
+    "is" "between" Arithmatic ".." Arithmatic => "",
+    "is" "in" Arithmatic => ""
 
 }
 
@@ -139,18 +152,19 @@ Arithmatic: &'input str = {
 }
 
 Term: &'input str = {
-    Name => "",
+    Name => <>,
     Num => "",
     "(" Expr ")" => "",
+    "members" => ""
     //function call here
 }
 
 
 Name: &'input str = {
-    <r"[A-Za-z]+"> => ""
+    <r"[a-zA-Z_][a-zA-Z-9_]*"> => <>
 }
-Num: &'input str = {
-    <r"[0-9]+"> => ""
+Num: u32 = {
+    <r"[0-9]+"> => u32::from_str(<>).unwrap()
 }
 
 
