@@ -1,4 +1,4 @@
-use lalrpop_util::lalrpop_mod;
+use lalrpop_util::{lalrpop_mod,ParseError};
 
 lalrpop_mod!(pub d_grammar);
 
@@ -8,13 +8,13 @@ fn d_gram_test(){
 
     let spec = d_grammar::SpecParser::new()
                     .parse( &mut errors,
-                            "
+                            r#"
                             module time is
 
                                 Clocks are { hours, minutes, seconds }
-                                where: hours is in Int and is between 1..12.
-                                where: minutes is in Int and is between 1..59.
-                                where: seconds is in Int and is between 1..59.
+                                    where: hours is in Int and is between 1..12.
+                                    where: minutes is in Int and is between 1..59.
+                                    where: seconds is in Int and is between 1..59.
 
                                 members are { c in Clocks }
 
@@ -22,15 +22,35 @@ fn d_gram_test(){
                                     when always:
                                     then:
                                         for c in members.
+
+                                        c->seconds' := c + 1.
+
                                         
+
                                 end action
 
                             end time 
                         
-                            ");
-    println!("Line\n:{}\n",spec.clone().unwrap());
+                            "#);
+    match spec {
+        Ok(spec) => println!("{}",spec),
+        Err(parse_error) => match parse_error {
+            ParseError::InvalidToken { location } => 
+                println!("Invalid token at location: {:?}", location),
+            ParseError::UnrecognizedEof { location, expected } => 
+                println!("Unrecognized EOF at location: {:?}, expected: {:?}", location, expected),
+            ParseError::UnrecognizedToken { token, expected } => 
+                println!("Unrecognized token {:?}, expected: {:?}", token, expected),
+            ParseError::ExtraToken { token } => 
+                println!("Extra token found: {:?}", token),
+            ParseError::User { error } => 
+                println!("User error: {:?}", error),
+        },
+    }
+    //println!("Line\n:{}\n",spec.clone().unwrap());
     //assert!( spec.is_ok() );
 }
+
 
 
 //#[cfg(not(test))]

@@ -89,7 +89,7 @@ If_Stmt: &'input str = {
 
     Else?
 
-    "endif" => ""
+    "end" "if" => ""
 
 }
 
@@ -104,21 +104,26 @@ Else: &'input str = {
 }
 
 Assignment: &'input str = {
-    Name "'" ":=" Expr => ""
+    Name r#"'"# ":=" Expr => ""
 }
+//todo, let := will-be
 
 Expr: &'input str = {
 
     #[precedence(level="0")]
     Membership => "",
 
-    // Conditional Exprssions:
     #[precedence(level="1")] #[assoc(side="left")]
+    Expr "equals" Membership => "",
+    Expr "not-equals" Membership => "",
+
+    // Conditional Exprssions:
+    #[precedence(level="2")] #[assoc(side="left")]
     Expr "and" Membership => "",
     Expr "or" Membership => "",
-    Expr "or-either" Membership => "",
+    Expr "or-rather" Membership => "",
 
-    #[precedence(level="2")] #[assoc(side="left")]
+    #[precedence(level="3")] #[assoc(side="left")]
     "not" Expr => "",
 
 }
@@ -161,8 +166,13 @@ Term: &'input str = {
 
 
 Name: &'input str = {
+    Word ("->" Word )* => ""
+}
+
+Word: &'input str = {
     <r"[a-zA-Z_][a-zA-Z-9_]*"> => <>
 }
+
 Num: u32 = {
     <r"[0-9]+"> => u32::from_str(<>).unwrap()
 }
