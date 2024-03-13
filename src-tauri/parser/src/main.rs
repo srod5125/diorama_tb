@@ -23,8 +23,7 @@ fn d_gram_test(){
                                     then:
                                         for c in members.
 
-                                        c->seconds' := c + 1.
-
+                                        c->seconds' := c->seconds + 1.
                                         
 
                                 end action
@@ -33,7 +32,7 @@ fn d_gram_test(){
                         
                             "#);
     match spec {
-        Ok(spec) => println!("{}",spec),
+        Ok(spec) => println!("no errs: {}",spec),
         Err(parse_error) => match parse_error {
             ParseError::InvalidToken { location } => 
                 println!("Invalid token at location: {:?}", location),
