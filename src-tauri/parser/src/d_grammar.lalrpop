@@ -1,26 +1,29 @@
 use lalrpop_util::ErrorRecovery;
 
-use crate::ast::Spec;
-use z3::*;
+use crate::ast::{Spec,bound_kind,Range};
+use crate::ast;
+use z3::ast::*;
+use z3::Sort;
 
 grammar<'err, 'spec>(
                 errors: &'err mut Vec<ErrorRecovery<usize,
                                 Token<'input>, 
                                 &'static str>>,
-                specification: &'spec  Box<Spec>
+                mod_spec: &'spec Box<Spec>
              );
+//TODO: relate input lifetime to spec lifetime
 
 
-pub Spec: Box<Spec> = {
-    <n:Num> => {
-        //specification.ast = n;
-        //specification
-        println!("z3 int: {}",n);
-        let spec = Box::new(Spec::new());
-        spec
+pub Spec:&'spec Box<Spec> = {
+    <a:Expr> => {
+        //mod_spec.ast = n;
+        //mod_spec
+        println!("exp: {}",a.simplify());
+        mod_spec
     }
 };
 
+//"module" Name "is"
 //    Data
 //    Members
 //    Body
@@ -35,15 +38,49 @@ Body: &'input str = {
 }
 
 Scheme: &'input str = {
-    Name "is" "in" Set Where_Clause* => "",
-    Name "are" Set Where_Clause* => ""
-}
-Where_Clause: &'input str = {
-    "where" ":" Expr "."  => ""
+    Name "is" "in" Set  => "",
+    Name "are" Record  => ""
 }
 
-Set: &'input str = {
-    "{" Expr ("," Expr )* "}" => ""
+Record: &'input str = {
+    "{" Map  ("," Map )* "}" => ""
+}
+//TODO: will be array of enumkind -> dynamic
+//      
+
+Map: &'input str = {
+    Name ":" Expr => ""
+}
+
+Set: z3::ast::Set<'spec> = {
+    //Name => "",
+
+    //TODO: return untyped set
+    "{" "}" =>  {
+        let bool_sort = Sort::bool(&mod_spec.ctx);
+        let empty  = Sort::set(&mod_spec.ctx, &bool_sort);
+        z3::ast::Set::empty(&mod_spec.ctx,&empty)
+    } ,
+
+    "{" <e1:Expr> <e_K:("," <Expr> )*> "}" => {
+
+        let same_sort = e1.sort_kind();
+        for e in &e_K {
+            if same_sort != e.sort_kind() {
+                //return err
+            }
+        }
+        
+        let set = z3::ast::Set::empty(&mod_spec.ctx,&e1.get_sort());
+
+        set.add(&e1);
+
+        for e in &e_K {
+            set.add(e);
+        }
+
+        set
+    }
 }
 
 Members: &'input str = {
@@ -118,70 +155,238 @@ Assignment: &'input str = {
 }
 //todo, let := will-be
 
-Expr: &'input str = {
-
+Expr: z3::ast::Dynamic<'spec> = {
     #[precedence(level="0")]
-    Membership => "",
+    Equality => <>,
 
     // Conditional Exprssions:
     #[precedence(level="2")] #[assoc(side="left")]
-    Expr "and" Membership => "",
-    Expr "or" Membership => "",
-    Expr "or-rather" Membership => "",
+    <ex:Expr> "and" <eq:Equality> => {
+        z3::ast::Bool::and(&mod_spec.ctx,&[&ex.as_bool().unwrap(),
+                                           &eq.as_bool().unwrap()])
+                                           .into()
+    },
+    <ex:Expr> "or" <eq:Equality> => {
+        z3::ast::Bool::or(&mod_spec.ctx,&[&ex.as_bool().unwrap(),
+                                           &eq.as_bool().unwrap()])
+                                           .into()
+    },
+    <ex:Expr> "or-rather" <eq:Equality> => {
+        z3::ast::Bool::xor(&ex.as_bool().unwrap(),
+                           &eq.as_bool().unwrap())
+                           .into()
+    },
 
     #[precedence(level="3")] #[assoc(side="left")]
-    "not" Expr => "",
+    "not" <e:Expr> => {
+        z3::ast::Bool::not(&e.as_bool().unwrap()).into()
+    },
 
 }
 
-Membership: &'input str = {
-
+Equality: z3::ast::Dynamic<'spec> = {
     #[precedence(level="0")]
-    Arithmatic => "",
+    Set_Opers => <>,
 
-    #[precedence(level="1")] #[assoc(side="left")]
-    Membership "equals" Arithmatic => "",
-    Membership "not-equals" Arithmatic => "",
-    Membership "is-greater-than" ("or-equals")? Arithmatic => "",
-    Membership "is-less-than" ("or-equals")? Arithmatic => "",
-    "is" "equals" Arithmatic => "",
-    "is" "not-equals" Arithmatic => "",
-    "is" "is-greater-than" ("or-equals")? Arithmatic => "",
-    "is" "is-less-than" ("or-equals")? Arithmatic => "",
-
-    #[precedence(level="2")] #[assoc(side="left")]
-    Membership "is"? "between" Arithmatic ".." Arithmatic => "",
-    Membership "is"? "in" Arithmatic => "",
-    "is" "between" Arithmatic ".." Arithmatic => "",
-    "is" "in" Arithmatic => ""
-
+    #[precedence(level="1")]
+    <e:Equality> "equals" <s:Set_Opers> => {
+         let eq = z3::ast::Dynamic::eq(&e,&s);
+         z3::ast::Bool::from_bool(&mod_spec.ctx,eq).into()
+    },
+    <e:Equality>  "not-equals" <s:Set_Opers> => {
+         let eq = z3::ast::Dynamic::ne(&e,&s);
+         z3::ast::Bool::from_bool(&mod_spec.ctx,eq).into()
+    },
 }
 
-Arithmatic: &'input str = {
+//TODO: for each set op, check if
+//      each set has same type
+
+Set_Opers: z3::ast::Dynamic<'spec> = {
+    #[precedence(level="0")]
+    Membership => <>, 
+
+    #[precedence(level="1")]
+    <s:Set_Opers> "unions" <m:Membership> => {
+        z3::ast::Set::set_union(&mod_spec.ctx,&[&s.as_set().unwrap(),
+                                                &m.as_set().unwrap()])
+                                                .into()
+    },
+    <s:Set_Opers> "intersects" <m:Membership> => {
+        z3::ast::Set::intersect(&mod_spec.ctx,&[&s.as_set().unwrap(),
+                                                &m.as_set().unwrap()])
+                                                .into()
+    },
+    <s:Set_Opers> "differences" <m:Membership> => {
+        z3::ast::Set::difference(&s.as_set().unwrap(),
+                                 &m.as_set().unwrap())
+                                 .into()
+    },
+    <s:Set_Opers>  "is-subset" <m:Membership> => {
+        z3::ast::Set::set_subset(&s.as_set().unwrap(),
+                                 &m.as_set().unwrap())
+                                .into()
+    },
+    <s:Set_Opers>  "is-in" <m:Membership> => {
+        z3::ast::Set::member(&s.as_set().unwrap(),
+                             &m.as_set().unwrap())
+                             .into()
+    },
+
+    #[precedence(level="2")]
+    "compliments" <s:Set_Opers> => {
+        z3::ast::Set::complement(&s.as_set().unwrap()).into()
+    }
+}
+
+
+//TODO: can add pre check to check if
+//      element & set are of same type,
+//      return err
+Membership: z3::ast::Dynamic<'spec> = {
 
     #[precedence(level="0")]
-    Term => "",
+    Arithmatic => <>,
 
     #[precedence(level="1")] #[assoc(side="left")]
-    Arithmatic "*" Term => "",
-    Arithmatic "/" Term => "",
+    <m:Membership> "is-greater-than" <oe:("or-equals")?> <a:Arithmatic> => {
+        match oe {
+            None    => {
+                z3::ast::Int::gt(&m.as_int().unwrap(),
+                                 &a.as_int().unwrap()).into()
+            },
+            Some(_) => {
+                z3::ast::Int::ge(&m.as_int().unwrap(),
+                                 &a.as_int().unwrap()).into()
+            }
+        }
+    },
+    <m:Membership> "is-less-than" <oe:("or-equals")?> <a:Arithmatic> => {
+        match oe {
+            None    => {
+                z3::ast::Int::lt(&m.as_int().unwrap(),
+                                 &a.as_int().unwrap()).into()
+            },
+            Some(_) => {
+                z3::ast::Int::le(&m.as_int().unwrap(),
+                                 &a.as_int().unwrap()).into()
+            }
+        }
+    },
+    //"is" "is-greater-than" <oe:("or-equals")?> <a:Arithmatic> => "",
+    //"is" "is-less-than" <oe:("or-equals")?> <a:Arithmatic> => "",
 
     #[precedence(level="2")] #[assoc(side="left")]
-    Arithmatic "+" Term => "",
-    Arithmatic "-" Term => "",
+    <m:Membership> "is"? "between" <r:Range> => {
+        let b = match r.interval {
+                bound_kind::ll => {
+                    let gel = z3::ast::Int::ge(&m.as_int().unwrap(),&r.lb);
+                    let leu = z3::ast::Int::le(&m.as_int().unwrap(),&r.ub);
+                    z3::ast::Bool::and(&mod_spec.ctx, &[&gel,&leu])
+                }
+                bound_kind::lc => {
+                    let gel = z3::ast::Int::ge(&m.as_int().unwrap(),&r.lb);
+                    let ltu = z3::ast::Int::lt(&m.as_int().unwrap(),&r.ub);
+                    z3::ast::Bool::and(&mod_spec.ctx, &[&gel,&ltu])
+                }
+                bound_kind::cl => {
+                    let gtl = z3::ast::Int::gt(&m.as_int().unwrap(),&r.lb);
+                    let leu = z3::ast::Int::le(&m.as_int().unwrap(),&r.ub);
+                    z3::ast::Bool::and(&mod_spec.ctx, &[&gtl,&leu])
+                }
+                bound_kind::cc => {
+                    let gtl = z3::ast::Int::gt(&m.as_int().unwrap(),&r.lb);
+                    let ltu = z3::ast::Int::lt(&m.as_int().unwrap(),&r.ub);
+                    z3::ast::Bool::and(&mod_spec.ctx, &[&gtl,&ltu])
+                }
+        };
+        b.into()
+    },
+    //"is" "between" <r:Range> => {},
+    //"is" "in" <a:Arithmatic> => {}
+}
+Range: ast::Range<'spec> = {
+    <a1:Arithmatic> ".." <a2:Arithmatic> => {
+        ast::Range {
+            lb : a1.as_int().unwrap(),
+            ub : a2.as_int().unwrap(),
+            interval : bound_kind::ll
+        }
+    },
+    "[" <a1:Arithmatic> ".." <a2:Arithmatic> "]" => {
+        ast::Range {
+            lb : a1.as_int().unwrap(),
+            ub : a2.as_int().unwrap(),
+            interval : bound_kind::ll
+        }
+    },
+    "[" <a1:Arithmatic> ".." <a2:Arithmatic> ")" => {
+        ast::Range {
+            lb : a1.as_int().unwrap(),
+            ub : a2.as_int().unwrap(),
+            interval : bound_kind::lc
+        }
+    },
+    "(" <a1:Arithmatic> ".." <a2:Arithmatic> "]" => {
+        ast::Range {
+            lb : a1.as_int().unwrap(),
+            ub : a2.as_int().unwrap(),
+            interval : bound_kind::cl
+        }
+    },
+    "(" <a1:Arithmatic> ".." <a2:Arithmatic> ")" => {
+        ast::Range {
+            lb : a1.as_int().unwrap(),
+            ub : a2.as_int().unwrap(),
+            interval : bound_kind::cc
+        }
+    },
+}
+
+
+Arithmatic: z3::ast::Dynamic<'spec> = {
+
+    #[precedence(level="0")]
+    Term => <>,
+
+    #[precedence(level="1")] #[assoc(side="left")]
+    <a:Arithmatic> "*" <t:Term> => {
+        z3::ast::Int::mul(&mod_spec.ctx, &[&a.as_int().unwrap(),
+                                           &t.as_int().unwrap()])
+                                           .into()
+    },
+    <a:Arithmatic> "/" <t:Term> => {
+        z3::ast::Int::div(&a.as_int().unwrap(),
+                          &t.as_int().unwrap())
+                          .into()
+    },
+
+    #[precedence(level="2")] #[assoc(side="left")]
+    <a:Arithmatic> "+" <t:Term> => {
+        z3::ast::Int::add(&mod_spec.ctx, &[&a.as_int().unwrap(),
+                                           &t.as_int().unwrap()])
+                                           .into()
+    },
+    <a:Arithmatic> "-" <t:Term> => {
+        z3::ast::Int::sub(&mod_spec.ctx, &[&a.as_int().unwrap(),
+                                           &t.as_int().unwrap()])
+                                           .into()
+    },
 
     #[precedence(level="3")] #[assoc(side="left")]
-    "-" Arithmatic => "",
+    "-" <a:Arithmatic> => {
+        z3::ast::Int::unary_minus(&a.as_int().unwrap()).into()
+    },
 }
 
-Term: &'input str = {
-    Name => <>,
-    Num => "",
-    "(" Expr ")" => "",
-    "members" => "",
-    Set => ""
+Term: z3::ast::Dynamic<'spec> = {
+    //Name => <>,
+    <n:Num> => n.into(),
+    //"(" Expr ")" => "",
+    //"members" => "",
+    <s:Set> => s.into(),
+}
     //function call here
-}
 
 
 Name: &'input str = {
@@ -192,9 +397,9 @@ Word: &'input str = {
     <r"[a-zA-Z_][a-zA-Z0-9_]*"> => <>
 }
 
-Num: z3::ast::Int<'spec>= {
+Num: z3::ast::Int<'spec> = {
     <r"[0-9]+"> => {
-        z3::ast::Int::from_str(&specification.ctx, <> ).unwrap()
+        z3::ast::Int::from_str(&mod_spec.ctx, <> ).unwrap()
     }
 }
 
@@ -202,7 +407,17 @@ Num: z3::ast::Int<'spec>= {
 
 
 //TODO: must phrases as invariants
-//TODO: eventually & always  
-//TODO: union & list ops
+//TODO: implement eventually & always  
+//TODO: implement lists
+//TODO: make set with : syntax@1
+//TODO: rewrite class calls to use self when feasible
+//TODO: go through all unwraps
 
-//import z3 ast directly to build
+
+// ++ Precednce ++
+//   -conditionals
+//   -eqluatiy
+//   -set_ops
+//   -ranges 
+//   -membership 
+//   -arithmatic 

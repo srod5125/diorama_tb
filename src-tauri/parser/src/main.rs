@@ -14,8 +14,7 @@ fn d_gram_test(){
                     .parse( &mut errors,
                             &spec_obj,
                             r#"
-                                123
-                        
+                                {1,2,4}
                             "#);
     match spec {
         Ok(_) => println!("no errs: {}",123),
