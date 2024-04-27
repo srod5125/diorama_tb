@@ -3,19 +3,22 @@ use lalrpop_util::ErrorRecovery;
 use crate::ast::{Spec,bound_kind,Range};
 use crate::ast;
 use z3::ast::*;
-use z3::Sort;
+use z3::{
+    Sort,
+    Symbol,
+    DatatypeAccessor,
+    DatatypeBuilder
+};
 
 grammar<'err, 'spec>(
                 errors: &'err mut Vec<ErrorRecovery<usize,
-                                Token<'input>, 
-                                &'static str>>,
+                                      Token<'input>, 
+                                      &'static str>>,
                 mod_spec: &'spec Box<Spec>
              );
-//TODO: relate input lifetime to spec lifetime
-
 
 pub Spec:&'spec Box<Spec> = {
-    <a:Expr> => {
+    <a:Scheme> => {
         //mod_spec.ast = n;
         //mod_spec
         println!("exp: {}",a.simplify());
@@ -37,45 +40,130 @@ Body: &'input str = {
     <Action+> => ""
 }
 
-Scheme: &'input str = {
-    Name "is" "in" Set  => "",
-    Name "are" Record  => ""
+Scheme: z3::ast::Dynamic<'spec> = {
+    //Name "is" "in" Set  => {},
+    //Name "is-set-of" Name => {}, 
+
+    // datatypes
+    <w:Word> "are" "{" <m1:(<Word> ":" <Word>)>  <mK:("," <Word> ":" <Word>)*> "}"  => {
+        
+        let mut maps: Vec<(&str, &str)> = Vec::new();
+        maps.push(mK[0]);
+        for row in &mK{
+            maps.push(*row);
+        }
+
+        let rec1 = DatatypeBuilder::new(&mod_spec.ctx, w);
+       
+        //assert len of r is greater than 0
+
+        //check branch.1 is valid sort
+        let mut rec2 = rec1.variant( 
+            m1.0 , 
+            vec![( 
+                "val", 
+                DatatypeAccessor::Sort(
+                    ast::str_To_Sort(&m1.1,&mod_spec.ctx)
+                )
+            )]
+        );
+
+        for (wi,ti) in &maps {
+            rec2 = rec2.variant( 
+                wi, 
+                vec![( 
+                    "val",
+                    DatatypeAccessor::Sort(
+                    ast::str_To_Sort(&ti,&mod_spec.ctx)
+                )
+                )]
+            );
+        }
+        let rec3 = rec2.finish();
+
+        Datatype::new_const(
+            &mod_spec.ctx,
+            w,
+            &rec3.sort
+        ).into()
+    },
+
+    //enums
+    <w:Word> "are" "<" <l1:Word>  <lK:("," <Word> )*> ">" => {
+        
+        let mut enums : Vec<Symbol> = Vec::new();
+
+        for (i,label_i) in lK.iter().enumerate() {
+            enums[i] = Symbol::String(label_i.to_string());
+        }
+
+        let e_name = Symbol::String(w.to_string());
+
+        let (enum_sort, _, _) = z3::Sort::enumeration(
+            &mod_spec.ctx,
+            e_name.clone(),
+            &enums[..]
+        );
+        
+        z3::ast::Datatype::new_const(
+            &mod_spec.ctx,
+            e_name.clone(),
+            &enum_sort
+        ).into()
+    }
+    
 }
 
-Record: &'input str = {
-    "{" Map  ("," Map )* "}" => ""
-}
-//TODO: will be array of enumkind -> dynamic
-//      
+/*
+    //TODO: evenutal implement records as such:
+    Record: Vec<&'spec (String<'spec>, Sort<'spec> )> = {
+        "{" <m1:Map>  <mK:("," <Map> )*> "}" => {
+            let mut map_vec: Vec<&(String, Sort)> = Vec::new();
 
-Map: &'input str = {
-    Name ":" Expr => ""
-}
+            map_vec.push(&m1);
 
+            for m in &mK {
+                map_vec.push(m);
+            }
+
+            map_vec
+        }
+    }
+*/
+/*
+    TODO: implement record as such:
+    cant get this to work
+    Map: (String<'spec>,Sort<'spec>) = {
+        <n:Word> ":" <e:Word> => {
+            (n.to_string(),
+            ast::str_To_Sort((&e).to_string(),&mod_spec.ctx))
+        }
+    }
+*/
 Set: z3::ast::Set<'spec> = {
     //Name => "",
 
     //TODO: return untyped set
-    "{" "}" =>  {
+    "empty" =>  {
         let bool_sort = Sort::bool(&mod_spec.ctx);
         let empty  = Sort::set(&mod_spec.ctx, &bool_sort);
         z3::ast::Set::empty(&mod_spec.ctx,&empty)
     } ,
 
-    "{" <e1:Expr> <e_K:("," <Expr> )*> "}" => {
+    "{" <e1:Expr> <eK:("," <Expr> )*> "}" => {
 
         let same_sort = e1.sort_kind();
-        for e in &e_K {
+        for e in &eK {
             if same_sort != e.sort_kind() {
-                //return err
+                //TODO: return err
             }
         }
-        
+
         let set = z3::ast::Set::empty(&mod_spec.ctx,&e1.get_sort());
 
         set.add(&e1);
 
-        for e in &e_K {
+        for e in &eK {
             set.add(e);
         }
 
@@ -385,6 +473,8 @@ Term: z3::ast::Dynamic<'spec> = {
     //"(" Expr ")" => "",
     //"members" => "",
     <s:Set> => s.into(),
+    //<r:Record> => r.into(),
+    //<l:Label_Access> => l.into()
 }
     //function call here
 

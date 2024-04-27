@@ -14,7 +14,10 @@ fn d_gram_test(){
                     .parse( &mut errors,
                             &spec_obj,
                             r#"
-                                {1,2,4}
+                                clocks are {
+                                    hours:int,
+                                    min  :int
+                                }
                             "#);
     match spec {
         Ok(_) => println!("no errs: {}",123),

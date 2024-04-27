@@ -35,6 +35,23 @@ pub struct Range<'ctx> {
     pub interval : bound_kind
 }
 
+
+pub fn str_To_Sort<'input,'spec:'input>(
+        sort_string : &str, 
+        ctx: &'spec z3::Context 
+    ) 
+    -> Sort<'spec> {
+    match sort_string {
+        "int" => {
+            Sort::int(&ctx)
+        },
+        "bool" => {
+            Sort::bool(&ctx)
+        },
+        _ => Sort::int(&ctx)
+    }
+}
+
 /*
 pub fn seed_sort<'a>( seed: &'a z3::ast::Dynamic, ctx: &'a z3::Context ) 
     -> Sort{
